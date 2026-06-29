@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 
-// Declarations for TypeScript environments
+// Declarations for TypeScript environments to prevent Window errors
 declare global {
   interface Window {
     YT: any;
@@ -31,7 +31,12 @@ const themeStyles = {
   forest: { bg: 'bg-[#0b1411]/80', border: 'border-emerald-800/40', accent: 'bg-emerald-600 hover:bg-emerald-500', text: 'text-emerald-400' }
 };
 
-export default function LofiPlayer() {
+// 1. Added the Props interface to accept the videoId from the Parent Dashboard
+interface Props { 
+  videoId: string; 
+}
+
+export default function LofiPlayer({ videoId }: Props) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isMounted, setIsMounted] = useState(false);
   const [playerState, setPlayerState] = useState<string>('Connecting...');
@@ -39,7 +44,7 @@ export default function LofiPlayer() {
   const playerRef = useRef<any>(null);
   const iframeContainerId = 'youtube-player-element';
 
-  // 1. Safe localStorage Initialization (Prevents Next.js Hydration Errors)
+  // Safe localStorage Initialization (Prevents Next.js Hydration Errors)
   useEffect(() => {
     setIsMounted(true);
     const saved = localStorage.getItem('lofi-space-settings');
@@ -52,18 +57,17 @@ export default function LofiPlayer() {
     }
   }, []);
 
-  // 2. Persist configurations when state changes
+  // Persist configurations when state changes
   useEffect(() => {
     if (isMounted) {
       localStorage.setItem('lofi-space-settings', JSON.stringify(settings));
     }
   }, [settings, isMounted]);
 
-  // 3. YouTube API Dynamic Script Loading
+  // YouTube API Dynamic Script Loading
   useEffect(() => {
     if (!isMounted) return;
 
-    // Load API asynchronously if it isn't already loaded
     if (!window.YT) {
       const tag = document.createElement('script');
       tag.src = 'https://www.youtube.com/iframe_api';
@@ -71,12 +75,10 @@ export default function LofiPlayer() {
       firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
     }
 
-    // Set up global hook for YT API Initialization
     window.onYouTubeIframeAPIReady = () => {
       initializePlayer();
     };
 
-    // Handle instances where script loaded faster than hook setup
     if (window.YT && window.YT.Player) {
       initializePlayer();
     }
@@ -86,11 +88,18 @@ export default function LofiPlayer() {
     };
   }, [isMounted]);
 
+  // 2. NEW: Watch for videoId prop changes to switch video dynamically from the library
+  useEffect(() => {
+    if (playerRef.current && playerRef.current.loadVideoById) {
+      playerRef.current.loadVideoById(videoId);
+    }
+  }, [videoId]);
+
   const initializePlayer = () => {
     playerRef.current = new window.YT.Player(iframeContainerId, {
       height: '100%',
       width: '100%',
-      videoId: 'E2vONfzoyRI', // Jazz Lofi Radio
+      videoId: videoId, // 3. Replaced hardcoded ID with the dynamic prop
       playerVars: {
         autoplay: 0,
         controls: 0,
@@ -108,7 +117,6 @@ export default function LofiPlayer() {
 
   const onPlayerReady = (event: any) => {
     setPlayerState('Ready');
-    // Apply persistent volume/mute properties upon initialization
     event.target.setVolume(settings.volume);
     if (settings.isMuted) {
       event.target.mute();
@@ -160,7 +168,6 @@ export default function LofiPlayer() {
     }
   };
 
-  // Prevent UI rendering flashes during Next.js server pre-rendering
   if (!isMounted) return <div className="text-gray-500 animate-pulse">Loading interface profile...</div>;
 
   const activeTheme = themeStyles[settings.theme] || themeStyles.midnight;
